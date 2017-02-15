@@ -1,4 +1,6 @@
-﻿using bPerformanceTracker.Source.Models;
+﻿using bPerformanceTracker.Helpers;
+using bPerformanceTracker.Source.Enum;
+using bPerformanceTracker.Source.Models;
 using System.Collections.Generic;
 using System.Diagnostics;
 
@@ -7,13 +9,22 @@ namespace bPerformanceTracker.Source.Helpers
     internal class PerformanceManager
     {
         private static PerformanceManager instance;
-        private PerformanceCounter performanceMonitorRAM;
-        private PerformanceCounter performanceMonitorCPU;
+        private List<PerformanceCounter> performanceMonitors;
 
         public PerformanceManager()
         {
-            performanceMonitorRAM = new PerformanceCounter("Memory", "Available MBytes", true);
-            performanceMonitorCPU = new PerformanceCounter("Processor", "% Processor Time", "_Total", true);
+            performanceMonitors = new List<PerformanceCounter>();
+            var availableCategories = GetAvailableCategories();
+            foreach (var category in availableCategories)
+            {
+                var availableCounters = GetCounterTypesForCategory(category);
+                foreach (var counter in availableCounters)
+                {
+                    performanceMonitors.Add(new PerformanceCounter(category.CategoryName, counter.CounterName));
+                    Logger.Instance.LogMessage(LogType.Debug, string.Format("Added performance monitor, category: {0}, counter: {1}", category.CategoryName, counter.CounterName));
+                }
+            }
+            Logger.Instance.LogMessage(LogType.Debug, string.Format("{0} performance monitors were added.", performanceMonitors.Count));
         }
 
         private PerformanceManager Instance
@@ -39,8 +50,12 @@ namespace bPerformanceTracker.Source.Helpers
         public List<PerformanceCounter> GetCounterTypesForCategory(PerformanceCounterCategory category)
         {
             List<PerformanceCounter> availableCountersList = new List<PerformanceCounter>();
-            var availableCounters = category.GetCounters();
-            availableCountersList.AddRange(availableCounters);
+            var instanceNames = category.GetInstanceNames();
+            var availableCounters = new List<PerformanceCounterCategory>();
+            foreach (var instanceName in instanceNames)
+            {
+                availableCountersList.AddRange(category.GetCounters(instanceName));
+            }
             return availableCountersList;
         }
 
@@ -48,9 +63,12 @@ namespace bPerformanceTracker.Source.Helpers
         {
             return new PerformanceDataEntry()
             {
-                MemoryAvailable = performanceMonitorRAM.NextValue(),
-                ProcessorUsage = performanceMonitorCPU.NextValue()
             };
+        }
+
+        public List<PerformanceCounter> FindPerformanceCounters(string searchTerm)
+        {
+            return performanceMonitors.FindAll(x => x.CounterName.Contains(searchTerm));
         }
     }
 }
